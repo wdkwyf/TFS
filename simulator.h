@@ -10,7 +10,7 @@
 #include "ext2.h"
 char current_path[256];//当前路径
 
-#define INODE_TABLE (1536+512)  //索引节点表起始地址
+#define INODE_TABLE (1536+512+512+512)  //索引节点表起始地址
 #define INODE_SIZE 64   //sizeof(struct inode)
 #define SB_SIZE 32      //sizeof(struct super_block)
 #define GD_SIZE 32      //sizeof(struct group_desc)

@@ -1,15 +1,11 @@
-/*************************************************************************
-	> File Name: simulator.c
-	> Author: liangTao
-	> Mail: 824573233@qq.com 
-	> Created Time: 2016年12月27日 星期二 15时28分16秒
- ************************************************************************/
-
 #include<stdio.h>
 #include<string.h>
 #include"simulator.h"
+#include<iostream>
 
-/*************************************************																					Interface
+using namespace std;
+
+/*************************************************				Interface
  *************************************************/
 void help(void) {
     printf("   ***************************************************************************\n");
@@ -280,7 +276,7 @@ static void dir_prepare(unsigned short tmp, unsigned short len, int type) {
     {
         inode_area[0].i_size = 32;
         inode_area[0].i_blocks = 1;
-        inode_area[0].i_block[0] = alloc_block();
+        inode_area[0].i_block[0] = alloc_block(0);
         dir[0].inode = tmp;// '.'
         dir[1].inode = current_dir;//'..'
         dir[0].name_len = len;
@@ -485,6 +481,36 @@ static void remove_inode(unsigned short del_num) {
     update_group_desc();
 }
 
+void printBlockStatus() {
+    reload_block_bitmap();
+    unsigned char con = 128;
+    for (int i = 0; i < 512; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            char a = bitbuf[i] & con;
+            char b = bitbuf2[i] & con;
+            char c = bitbuf3[i] & con;
+            if (!a && !b && !c) {
+                cout << 'F';
+            }
+            if (!a && !b && c) {
+                cout << "T";
+            }
+            if (a && !b && !c) {
+                cout << "A";
+            }
+            if (!a && b && !c) {
+                cout << "f";
+            }
+            if (!a && b && c) {
+                cout << "a";
+            }
+            con = con / 2;
+        }
+
+
+    }
+}
+
 /*初始化磁盘*/
 void initialize_disk(void) {
     int i = 0;
@@ -546,7 +572,7 @@ void initialize_disk(void) {
     inode_area[0].i_ctime = 0;
     inode_area[0].i_mtime = 0;
     inode_area[0].i_dtime = 0;
-    inode_area[0].i_block[0] = alloc_block();
+    inode_area[0].i_block[0] = alloc_block(0);
     inode_area[0].i_blocks++;
     current_dir = get_inode();
     update_inode_entry(current_dir);
@@ -683,7 +709,7 @@ void mkdir(char tmp[9], int type) {
             update_dir(inode_area[0].i_block[i - 1]);
         } else//全满，新增加块
         {
-            inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block();
+            inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block(0);
             inode_area[0].i_blocks++;
             reload_dir(inode_area[0].i_block[inode_area[0].i_blocks - 1]);
             tmpno = dir[0].inode = get_inode();
@@ -726,7 +752,7 @@ void rmdir(char tmp[9]) {
             inode_area[0].i_size = 0;
             inode_area[0].i_blocks = 0;
 
-            remove_block(inode_area[0].i_block[0]);
+            remove_block(inode_area[0].i_block[0], 0);
             //更新tmp所在父目录
             reload_inode_entry(current_dir);//加载当前目录
             reload_dir(inode_area[0].i_block[j]);//加载将要删除的dir_entry
@@ -751,7 +777,7 @@ void rmdir(char tmp[9]) {
                     n++;
                 }
                 if (flag == 32) {
-                    remove_block(inode_area[0].i_block[m]);
+                    remove_block(inode_area[0].i_block[m], 0);
                     inode_area[0].i_blocks--;
                     while (m < inode_area[0].i_blocks) {
                         inode_area[0].i_block[m] = inode_area[0].i_block[m + 1];
@@ -783,7 +809,7 @@ void del(char tmp[9]) {
         }
         reload_inode_entry(i);//加载删除文件
         while (m < inode_area[0].i_blocks) {
-            remove_block(inode_area[0].i_block[m++]);
+            remove_block(inode_area[0].i_block[m++], 0);
         }
         inode_area[0].i_blocks = 0;
         inode_area[0].i_size = 0;
@@ -807,7 +833,7 @@ void del(char tmp[9]) {
                 n++;
             }
             if (flag == 32) {
-                remove_block(inode_area[i].i_block[m]);
+                remove_block(inode_area[i].i_block[m], 0);
                 inode_area[i].i_blocks--;
                 while (m < inode_area[i].i_blocks) {
                     inode_area[i].i_block[m] = inode_area[i].i_block[m + 1];
@@ -930,12 +956,12 @@ void write_file(char tmp[9]) /* 写文件 */
                 /* 分配文件所需块数目 */
                 if (inode_area[0].i_blocks <= need_blocks) {
                     while (inode_area[0].i_blocks < need_blocks) {
-                        inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block();
+                        inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block(0);
                         inode_area[0].i_blocks++;
                     }
                 } else {
                     while (inode_area[0].i_blocks > need_blocks) {
-                        remove_block(inode_area[0].i_block[inode_area[0].i_blocks - 1]);
+                        remove_block(inode_area[0].i_block[inode_area[0].i_blocks - 1], 0);
                         inode_area[0].i_blocks--;
                     }
                 }

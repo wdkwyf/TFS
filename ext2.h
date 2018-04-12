@@ -21,6 +21,7 @@ extern void rmdir(char tmp[9]);
 extern void mkdir(char tmp[9],int type);
 extern void cd(char tmp[9]);
 extern void format(void);
+extern void printBlockStatus();
 extern void initialize_memory(void);
 extern void help(void);
 
