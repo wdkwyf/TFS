@@ -2,6 +2,7 @@
 #include<string.h>
 #include"simulator.h"
 #include<iostream>
+#include <iomanip>
 
 using namespace std;
 
@@ -177,19 +178,20 @@ static int alloc_block(int mode) {
             return (0);
         }
         cur /= 8;
-        while (bitbuf[cur] == 255 && bitbuf2[cur] == 255 && bitbuf3[cur] == 255) {
+        while (bitbuf[cur] == 255 || bitbuf2[cur] == 255 || bitbuf3[cur] == 255||bitbuf[cur]+bitbuf2[cur]+bitbuf3[cur]>=255) {
             if (cur == 511)
                 cur = 0;
             else
                 cur++;
         }
-        while ((bitbuf[cur] & con) && (bitbuf2[cur] & con) && (bitbuf3[cur] & con)) {
+        while ((bitbuf[cur] & con) || (bitbuf2[cur] & con) || (bitbuf3[cur] & con)) {
             con = con / 2;
             flag++;
         }
         if (mode == 0) {
             //free to allocated
             bitbuf[cur] = bitbuf[cur] + con;
+            gdt[0].bg_free_blocks_count--;
         }
         if (mode == 1) {
             //free to transparent
@@ -197,23 +199,21 @@ static int alloc_block(int mode) {
         }
         last_alloc_block = cur * 8 + flag;
         update_block_bitmap();
-        gdt[0].bg_free_blocks_count--;
         update_group_desc();
         return last_alloc_block;
     }
     if (mode == 2) {
         cur /= 8;
-        while (bitbuf[cur] == 255 && bitbuf2[cur] == 255 && bitbuf3[cur] == 0) {
+        while (bitbuf[cur] ==255 || bitbuf2[cur] == 255 || bitbuf3[cur] == 0) {
             if (cur == 511)
                 cur = 0;
             else
                 cur++;
         }
-        while ((bitbuf[cur] & con) && (bitbuf2[cur] & con) && !(bitbuf3[cur] & con)) {
+        while ((bitbuf[cur] & con) || (bitbuf2[cur] & con) || !(bitbuf3[cur] & con)) {
             con = con / 2;
             flag++;
         }
-        bitbuf3[cur] = bitbuf3[cur] - con;
         bitbuf2[cur] = bitbuf2[cur] + con;
         last_alloc_block = cur * 8 + flag;
         update_block_bitmap();
@@ -236,6 +236,7 @@ static int alloc_block(int mode) {
         update_block_bitmap();
         return last_alloc_block;
     }
+    return 0;
 }
 
 /*
@@ -482,33 +483,43 @@ static void remove_inode(unsigned short del_num) {
 }
 
 void printBlockStatus() {
+    unsigned char con;
     reload_block_bitmap();
-    unsigned char con = 128;
+    for (int i = 0; i < 20; ++i) {
+        printf("\033[01;36m=\033[0m");
+    }
+    cout<<endl;
     for (int i = 0; i < 512; ++i) {
+        con = 128;
         for (int j = 0; j < 8; ++j) {
             char a = bitbuf[i] & con;
             char b = bitbuf2[i] & con;
             char c = bitbuf3[i] & con;
             if (!a && !b && !c) {
-                cout << 'F';
+                cout << "F";
             }
             if (!a && !b && c) {
-                cout << "T";
+                printf("\033[01;34mT\033[0m");
             }
             if (a && !b && !c) {
-                cout << "A";
+                printf("\033[01;31mA\033[0m");
             }
+            //010
             if (!a && b && !c) {
-                cout << "f";
+                printf("\033[01;33mf\033[0m");
             }
+            //011
             if (!a && b && c) {
-                cout << "a";
+                printf("\033[01;35ma\033[0m");
             }
             con = con / 2;
         }
-
-
     }
+    cout << endl;
+    for (int i = 0; i < 20; ++i) {
+        printf("\033[01;36m=\033[0m");
+    }
+    cout <<endl;
 }
 
 /*初始化磁盘*/
@@ -568,6 +579,7 @@ void initialize_disk(void) {
     inode_area[0].i_mode = 6;
     inode_area[0].i_blocks = 0;
     inode_area[0].i_size = 32;
+    inode_area[0].i_type = 0;
     inode_area[0].i_atime = 0;
     inode_area[0].i_ctime = 0;
     inode_area[0].i_mtime = 0;
@@ -666,12 +678,17 @@ void cd(char tmp[9]) {
     }
 }
 
-void mkdir(char tmp[9], int type) {
+void write_a_letter(char tmp[9],int mode) {
+    open_file(tmp);
+    write_file(tmp,mode);
+    close_file(tmp);
+}
+
+void mkdir(char tmp[9], int type,int mode) {
     unsigned short tmpno, i, j, k, flag;
-//	printf("创建文件：%s\n",tmp);
+    printf("创建文件：%s\n", tmp);
     //当前目录下新增目录或文件
     reload_inode_entry(current_dir);//加载当前目录的inode到inode_area[0]
-
     if (!(inode_area[0].i_mode & 2)) {
         printf("该文件夹下不可新建文件或目录！\n");
         return;
@@ -679,14 +696,14 @@ void mkdir(char tmp[9], int type) {
     //查看当前目录项
     if (!reserch_file(tmp, type, &i, &j, &k))//未找到同名文件
     {
-        //printf("目录项个数%d",inode_area[0].i_size);
+        printf("目录项个数：%d ", inode_area[0].i_size);
         if (inode_area[0].i_size == 4096)//目录项已满 8(max i_block)*512 = 4096
         {
             printf("Directory has no room to be alloced!\n");
             return;
         }
         flag = 1;
-        //printf("inode_area[0].i_blocks:%d\n",inode_area[0].i_blocks);
+        printf("inode_area[0].i_blocks:%d\n", inode_area[0].i_blocks);
         if (inode_area[0].i_size != inode_area[0].i_blocks * 512)//目录中有些块中32个dir_entry未满
         {
             i = 0;
@@ -709,7 +726,7 @@ void mkdir(char tmp[9], int type) {
             update_dir(inode_area[0].i_block[i - 1]);
         } else//全满，新增加块
         {
-            inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block(0);
+            inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block(mode);
             inode_area[0].i_blocks++;
             reload_dir(inode_area[0].i_block[inode_area[0].i_blocks - 1]);
             tmpno = dir[0].inode = get_inode();
@@ -845,6 +862,7 @@ void del(char tmp[9]) {
     } else {
         printf("the file %s not exists!\n", tmp);
     }
+    last_alloc_block = 1;
 }
 
 void open_file(char tmp[9]) {
@@ -852,7 +870,7 @@ void open_file(char tmp[9]) {
     flag = reserch_file(tmp, 1, &i, &j, &k);
     if (flag) {
         if (search_file(dir[k].inode)) {
-            printf("the file %s has opend!\n", tmp);
+            printf("the file %s has opened!\n", tmp);
         } else {
             flag = 0;
             while (fopen_table[flag]) {
@@ -878,7 +896,7 @@ void close_file(char tmp[9]) {
             fopen_table[flag] = 0;
             printf("file %s !close\n", tmp);
         } else {
-            printf("the file %s has not been opend!\n", tmp);
+            printf("the file %s has not been opened!\n", tmp);
         }
     } else {
         printf("the file %s does not exist!\n", tmp);
@@ -917,31 +935,35 @@ void read_file(char tmp[9]) {
 /*
  * 文件以覆盖方式写入
  */
-void write_file(char tmp[9]) /* 写文件 */
+void write_file(char tmp[9],int mode) /* 写文件 */
 {
     unsigned short flag, i, j, k, size = 0, need_blocks, length;
     flag = reserch_file(tmp, 1, &i, &j, &k);
     if (flag) {
         if (search_file(dir[k].inode)) {
             reload_inode_entry(dir[k].inode);
+            inode_area[0].i_type=mode;
             if (!(inode_area[0].i_mode & 2)) /* i_mode:111b:读,写,执行 */
             {
                 printf("The file %s can not be writed!\n", tmp);
                 return;
             }
             fflush(stdin);
-            while (1) {
-                tempbuf[size] = getchar();
-                if (tempbuf[size] == '#') {
-                    tempbuf[size] = '\0';
-                    break;
-                }
-                if (size >= 4095) {
-                    printf("Sorry,the max size of a file is 4KB!\n");
-                    break;
-                }
-                size++;
-            }
+            tempbuf[0] = 'a';
+            size++;
+
+//            while (1) {
+//                tempbuf[size] = getchar();
+//                if (tempbuf[size] == '#') {
+//                    tempbuf[size] = '\0';
+//                    break;
+//                }
+//                if (size >= 4095) {
+//                    printf("Sorry,the max size of a file is 4KB!\n");
+//                    break;
+//                }
+//                size++;
+//            }
             if (size >= 4095) {
                 length = 4096;
             } else {
@@ -956,7 +978,7 @@ void write_file(char tmp[9]) /* 写文件 */
                 /* 分配文件所需块数目 */
                 if (inode_area[0].i_blocks <= need_blocks) {
                     while (inode_area[0].i_blocks < need_blocks) {
-                        inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block(0);
+                        inode_area[0].i_block[inode_area[0].i_blocks] = alloc_block(mode);
                         inode_area[0].i_blocks++;
                     }
                 } else {
@@ -990,7 +1012,10 @@ void write_file(char tmp[9]) /* 写文件 */
         printf("The file %s does not exist!\n", tmp);
     }
 }
-
+void free_room(){
+    printf("\033[01;35m空间统计：y\033[0m:\n");
+    cout<<"剩余空间："<<gdt[0].bg_free_blocks_count*0.5<<" Mb"<<endl;
+}
 /*
  *改变权限
  */
@@ -1035,8 +1060,11 @@ void chmod_file(char tmp[9], int type) {
 }
 
 void ls(void) {
-    //printf("curret_dir = %d\n",current_dir);
-    printf("items		type		mode		size\n");
+    cout.flags(ios::left);
+    cout << setw(15) << "item";
+    cout << setw(15) << "type";
+    cout << setw(15) << "mode" << endl;
+
     unsigned short i, j, k, flag;
     i = 0;
     reload_inode_entry(current_dir);
@@ -1045,90 +1073,51 @@ void ls(void) {
         reload_dir(inode_area[0].i_block[i]);
         while (k < 32) {
             if (dir[k].inode) {
-                printf("%s", dir[k].name);
+                cout << setw(15) << dir[k].name;
                 if (dir[k].file_type == 2) {
-                    j = 0;
                     reload_inode_entry(dir[k].inode);
                     if (!strcmp(dir[k].name, "..")) {
-                        while (j++ < 13) {
-                            printf(" ");
-                        }
                         flag = 1;
                     } else if (!strcmp(dir[k].name, ".")) {
-                        while (j++ < 14) {
-                            printf(" ");
-                        }
                         flag = 0;
                     } else //其它目录
                     {
-                        while (j++ < 15 - dir[k].name_len) {
-                            printf(" ");
-                        }
                         flag = 2;
                     }
-                    printf(" <DIR>		");
-                    switch (inode_area[0].i_mode & 7) {
+                    cout << setw(15) << "<DIR>";
+                    switch (inode_area[0].i_type) {
+                        case 0:
+                            cout << setw(15) << "Local";
+                            break;
                         case 1:
-                            printf("__x");
+                            cout << setw(15) << "Contributed";
                             break;
-                        case 2:
-                            printf("_w_");
-                            break;
-                        case 3:
-                            printf("_wx");
-                            break;
-                        case 4:
-                            printf("r__");
-                            break;
-                        case 5:
-                            printf("r_x");
-                            break;
-                        case 6:
-                            printf("rw_");
-                            break;
-                        case 7:
-                            printf("rwx");
+                        default:
+                            cout << setw(15) << "Local";
                             break;
                     }
                     if (flag != 2) {
-                        printf("		----");
+                        cout << setw(15) << "----";
                     } else {
-                        printf("	      ");
-                        printf("%4ld bytes", inode_area[0].i_size);
+                        cout << setw(15) << inode_area[0].i_size << "bytes";
                     }
                 } else if (dir[k].file_type == 1) {
-                    j = 0;
                     reload_inode_entry(dir[k].inode);
-                    while (j++ < 15 - dir[k].name_len)
-                        printf(" ");
-                    printf("<FILE>		");
-                    switch (inode_area[0].i_mode & 7) {
+                    cout << setw(15) << "<FILE>";
+                    switch (inode_area[0].i_type) {
+                        case 0:
+                            cout << setw(15) << "Local";
+                            break;
                         case 1:
-                            printf("__x");
+                            cout << setw(15) << "Contributed";
                             break;
-                        case 2:
-                            printf("_w_");
-                            break;
-                        case 3:
-                            printf("_wx");
-                            break;
-                        case 4:
-                            printf("r__");
-                            break;
-                        case 5:
-                            printf("r_x");
-                            break;
-                        case 6:
-                            printf("rw_");
-                            break;
-                        case 7:
-                            printf("rwx");
+                        default:
+                            cout << setw(15) << "Local";
                             break;
                     }
-                    printf("	      ");
-                    printf("%4ld bytes", inode_area[0].i_size);
+                    cout << setw(15) << inode_area[0].i_size << "bytes";
                 }
-                printf("\n");
+                cout << endl;
             }
             k++;
             reload_inode_entry(current_dir);
